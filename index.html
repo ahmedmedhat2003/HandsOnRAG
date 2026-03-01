@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Book RAG — Ask Your Library</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --ink: #0e0c0a;
+    --paper: #f5f0e8;
+    --cream: #ede7d4;
+    --amber: #c8922a;
+    --amber-light: #e8b84b;
+    --rust: #8b3a1c;
+    --sage: #4a5e44;
+    --muted: #7a6e5e;
+    --border: #c8b99a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 20% 80%, rgba(200,146,42,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 10%, rgba(139,58,28,0.05) 0%, transparent 50%),
+      url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E");
+  }
+
+  header {
+    padding: 2.5rem 3rem 1.5rem;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    gap: 2rem;
+    justify-content: space-between;
+    position: relative;
+  }
+
+  header::before {
+    content: '';
+    position: absolute;
+    bottom: -6px; left: 3rem; right: 3rem;
+    height: 1px;
+    background: var(--amber);
+    opacity: 0.5;
+  }
+
+  .logo-block h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 900;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+
+  .logo-block h1 span { color: var(--amber); }
+  .logo-block p {
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 0.4rem;
+  }
+
+  #status-badge {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.9rem;
+    border-radius: 2px;
+    border: 1px solid;
+    transition: all 0.4s;
+  }
+  #status-badge.loading { border-color: var(--amber); color: var(--amber); animation: pulse 2s infinite; }
+  #status-badge.ready   { border-color: var(--sage); color: var(--sage); }
+  #status-badge.error   { border-color: var(--rust); color: var(--rust); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 110px);
+  }
+
+  /* SIDEBAR */
+  aside {
+    border-right: 1px solid var(--border);
+    padding: 2rem 1.5rem;
+    background: rgba(237,231,212,0.5);
+  }
+
+  aside h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.95rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .book-list { list-style: none; }
+  .book-list li {
+    font-size: 0.7rem;
+    padding: 0.5rem 0.6rem;
+    border-left: 2px solid transparent;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
+    transition: all 0.2s;
+    cursor: default;
+    word-break: break-word;
+  }
+  .book-list li:hover { border-left-color: var(--amber); color: var(--ink); }
+
+  .sample-qs { margin-top: 2rem; }
+  .sample-qs h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.95rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .sample-q {
+    font-size: 0.68rem;
+    padding: 0.5rem 0.7rem;
+    margin-bottom: 0.4rem;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    color: var(--ink);
+    line-height: 1.4;
+    transition: all 0.2s;
+  }
+  .sample-q:hover { background: var(--amber); color: #fff; border-color: var(--amber); }
+
+  /* MAIN */
+  main {
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 2.5rem;
+    gap: 1.5rem;
+  }
+
+  /* CHAT AREA */
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    min-height: 400px;
+    max-height: 60vh;
+    padding-right: 0.5rem;
+  }
+
+  #chat::-webkit-scrollbar { width: 4px; }
+  #chat::-webkit-scrollbar-track { background: transparent; }
+  #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    opacity: 0.4;
+    padding: 3rem;
+  }
+  .empty-state .icon { font-size: 3rem; }
+  .empty-state p { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    animation: fadeUp 0.3s ease both;
+  }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+  .msg-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .msg.user .msg-label { color: var(--amber); }
+
+  .msg-body {
+    padding: 1rem 1.2rem;
+    border-radius: 2px;
+    font-size: 0.78rem;
+    line-height: 1.7;
+  }
+
+  .msg.user .msg-body {
+    background: var(--ink);
+    color: var(--paper);
+    border-left: 3px solid var(--amber);
+    align-self: flex-end;
+    max-width: 85%;
+  }
+
+  .msg.assistant .msg-body {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--sage);
+    max-width: 100%;
+    white-space: pre-wrap;
+  }
+
+  .sources-toggle {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--amber);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 0.3rem;
+  }
+  .sources-toggle:hover { text-decoration: underline; }
+
+  .sources-panel {
+    display: none;
+    background: rgba(237,231,212,0.6);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 1rem;
+    margin-top: 0.3rem;
+    font-size: 0.65rem;
+  }
+  .sources-panel.open { display: block; }
+
+  .source-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed var(--border);
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .source-item:last-child { border-bottom: none; }
+  .source-item strong { color: var(--ink); }
+
+  /* TYPING INDICATOR */
+  .typing-dots span {
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: var(--muted);
+    border-radius: 50%;
+    margin: 0 2px;
+    animation: bounce 1.2s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+
+  /* INPUT AREA */
+  .input-row {
+    display: flex;
+    gap: 0.75rem;
+    border: 1.5px solid var(--border);
+    border-radius: 2px;
+    padding: 0.6rem;
+    background: #fff;
+    transition: border-color 0.2s;
+  }
+  .input-row:focus-within { border-color: var(--amber); }
+
+  #query {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    background: transparent;
+    color: var(--ink);
+    resize: none;
+    height: 44px;
+    padding: 0.3rem 0.5rem;
+  }
+
+  #send-btn {
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: 2px;
+    padding: 0 1.2rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  #send-btn:hover { background: var(--amber); }
+  #send-btn:disabled { background: var(--border); cursor: not-allowed; }
+
+  .hint { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.05em; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { display: none; }
+    header { padding: 1.5rem; }
+    main { padding: 1rem 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-block">
+    <h1>Book<span>RAG</span></h1>
+    <p>Ask your machine learning library anything</p>
+  </div>
+  <div id="status-badge" class="loading">⟳ Loading models…</div>
+</header>
+
+<div class="layout">
+  <aside>
+    {% if books %}
+    <h3>📚 Indexed Books</h3>
+    <ul class="book-list">
+      {% for book in books %}
+      <li>{{ book }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="sample-qs">
+      <h3>💡 Try asking</h3>
+      <div class="sample-q" onclick="askSample(this)">What is overfitting and how do we prevent it?</div>
+      <div class="sample-q" onclick="askSample(this)">Explain the difference between batch and stochastic gradient descent</div>
+      <div class="sample-q" onclick="askSample(this)">How does a transformer architecture work?</div>
+      <div class="sample-q" onclick="askSample(this)">What is regularization in machine learning?</div>
+      <div class="sample-q" onclick="askSample(this)">Explain backpropagation step by step</div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="chat">
+      <div class="empty-state" id="empty-state">
+        <div class="icon">📖</div>
+        <p>Ask a question about your books</p>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <textarea id="query" placeholder="Ask anything from your book collection…" rows="1"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuery();}"></textarea>
+      <button id="send-btn" onclick="sendQuery()">Ask →</button>
+    </div>
+    <p class="hint">Enter to send · Shift+Enter for new line</p>
+  </main>
+</div>
+
+<script>
+const chat    = document.getElementById('chat');
+const queryEl = document.getElementById('query');
+const sendBtn = document.getElementById('send-btn');
+const badge   = document.getElementById('status-badge');
+const empty   = document.getElementById('empty-state');
+
+let modelReady = false;
+
+async function pollStatus() {
+  try {
+    const r = await fetch('/status');
+    const d = await r.json();
+    if (d.model_loaded) {
+      modelReady = true;
+      badge.className = 'ready';
+      badge.textContent = `✓ Ready · ${d.chunks.toLocaleString()} chunks`;
+      sendBtn.disabled = false;
+    } else {
+      badge.className = 'loading';
+      badge.textContent = '⟳ Loading models…';
+      sendBtn.disabled = true;
+      setTimeout(pollStatus, 3000);
+    }
+  } catch(e) {
+    setTimeout(pollStatus, 5000);
+  }
+}
+
+function addMsg(role, text) {
+  empty.style.display = 'none';
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `
+    <span class="msg-label">${role === 'user' ? '▸ You' : '◆ AI'}</span>
+    <div class="msg-body">${text}</div>
+  `;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function addTyping() {
+  empty.style.display = 'none';
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.id = 'typing';
+  div.innerHTML = `
+    <span class="msg-label">◆ AI</span>
+    <div class="msg-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+  `;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function addAssistantMsg(text, sources) {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+
+  let srcHtml = '';
+  if (sources && sources.length) {
+    const items = sources.map((s,i) =>
+      `<div class="source-item"><strong>[${i+1}] ${s.source}</strong> · chunk ${s.chunk_id} · score ${s.score}<br><span style="opacity:0.7">${escapeHtml(s.preview)}…</span></div>`
+    ).join('');
+    srcHtml = `
+      <button class="sources-toggle" onclick="toggleSources(this)">▸ Show ${sources.length} sources</button>
+      <div class="sources-panel">${items}</div>
+    `;
+  }
+
+  div.innerHTML = `
+    <span class="msg-label">◆ AI</span>
+    <div class="msg-body">${escapeHtml(text)}</div>
+    ${srcHtml}
+  `;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function toggleSources(btn) {
+  const panel = btn.nextElementSibling;
+  panel.classList.toggle('open');
+  btn.textContent = panel.classList.contains('open')
+    ? '▾ Hide sources'
+    : `▸ Show ${panel.querySelectorAll('.source-item').length} sources`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function sendQuery() {
+  const q = queryEl.value.trim();
+  if (!q || !modelReady) return;
+
+  queryEl.value = '';
+  sendBtn.disabled = true;
+  addMsg('user', escapeHtml(q));
+  addTyping();
+
+  try {
+    const res = await fetch('/ask', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: q})
+    });
+    const data = await res.json();
+    if (data.error) {
+      const t = document.getElementById('typing');
+      if (t) t.remove();
+      addMsg('assistant', `⚠ Error: ${data.error}`);
+    } else {
+      addAssistantMsg(data.answer, data.sources);
+    }
+  } catch(e) {
+    const t = document.getElementById('typing');
+    if (t) t.remove();
+    addMsg('assistant', `⚠ Request failed: ${e.message}`);
+  } finally {
+    sendBtn.disabled = !modelReady;
+  }
+}
+
+function askSample(el) {
+  queryEl.value = el.textContent;
+  sendQuery();
+}
+
+// init
+sendBtn.disabled = true;
+pollStatus();
+</script>
+</body>
+</html>
